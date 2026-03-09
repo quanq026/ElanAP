@@ -46,12 +46,33 @@ Grab the latest from [Releases](https://github.com/quanq026/ElanAP/releases). Yo
 
 ## Building
 
+### Option 1: Visual Studio (recommended)
+
+1. Open `ElanAP\ElanAP.csproj` in **Visual Studio 2017+**
+2. Build → Build Solution (`Ctrl+Shift+B`)
+
+### Option 2: Command line
+
+NuGet packages (`HidSharp`, `Microsoft.Net.Compilers`) are already included in the `packages/` folder — no `nuget restore` needed.
+
+**If MSBuild is in PATH** (Visual Studio Developer Command Prompt):
 ```
-nuget restore
 msbuild ElanAP\ElanAP.csproj /p:Configuration=Release
 ```
 
-Output: `ElanAP\bin\Release\ElanAP.exe`
+**If MSBuild is NOT in PATH** (plain PowerShell/cmd):
+```
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe ElanAP\ElanAP.csproj /p:Configuration=Release
+```
+
+> **Note:** The .NET Framework 4.0 MSBuild will show a ToolsVersion warning and some assembly mismatch warnings — these are safe to ignore, the build still succeeds.
+
+### Output
+
+- **Debug:** `ElanAP\bin\Debug\ElanAP.exe`
+- **Release:** `ElanAP\bin\Release\ElanAP.exe`
+
+To run, keep `HidSharp.dll` in the same folder as `ElanAP.exe`.
 
 ## Credits
 

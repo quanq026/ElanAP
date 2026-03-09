@@ -5,6 +5,8 @@ VisualStudioVersion = 15.0.28307.168
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SynAP", "SynAP\SynAP.csproj", "{585CAD5B-105F-4425-B8E0-1791221EE3BC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ElanAP", "ElanAP\ElanAP.csproj", "{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7A0ADDB2-37C5-4295-98BB-62D3669B87B2}"
 	ProjectSection(SolutionItems) = preProject
 		README.md = README.md
@@ -26,6 +28,10 @@ Global
 		{585CAD5B-105F-4425-B8E0-1791221EE3BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{585CAD5B-105F-4425-B8E0-1791221EE3BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{585CAD5B-105F-4425-B8E0-1791221EE3BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-D1E2-F3A4B5C67890}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

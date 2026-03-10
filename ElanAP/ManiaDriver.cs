@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading;
@@ -75,6 +76,8 @@ namespace ElanAP
             }
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             try
@@ -162,6 +165,8 @@ namespace ElanAP
             }
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             try
@@ -387,6 +392,8 @@ namespace ElanAP
         private ManualResetEvent _threadReadyEvent;
         private volatile bool _inputStartedOK;
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private IntPtr InputWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
             try
@@ -430,6 +437,8 @@ namespace ElanAP
             _threadReadyEvent = null;
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void InputThreadProc()
         {
             try
@@ -728,6 +737,8 @@ namespace ElanAP
         }
 
         /// <summary>Fires immediately for each individual HID contact report — no frame-boundary wait.</summary>
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void HandleContactUpdate(int id, int x, int y, bool isDown)
         {
             try
@@ -836,6 +847,8 @@ namespace ElanAP
         }
 
         /// <summary>Called at frame boundary — clean up stale contacts and fire visual feedback.</summary>
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void HandleFrameComplete()
         {
             try
@@ -890,6 +903,8 @@ namespace ElanAP
         }
 
         /// <summary>Called when contactCount=0 and previous frame had contacts — all fingers lifted.</summary>
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void HandleAllContactsLifted()
         {
             try

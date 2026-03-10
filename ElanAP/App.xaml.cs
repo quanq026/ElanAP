@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
+using System.Security;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -25,12 +27,16 @@ namespace ElanAP
             WriteLog("=== App started ===");
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             WriteLog("CRASH (UI thread): " + e.Exception);
             e.Handled = false; // let it crash after logging
         }
 
+        [HandleProcessCorruptedStateExceptions]
+        [SecurityCritical]
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             WriteLog("CRASH (background): " + e.ExceptionObject);

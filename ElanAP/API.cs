@@ -311,7 +311,7 @@ namespace ElanAP
             if (_reportBuffer.Length < dwSizeHid)
                 _reportBuffer = new byte[dwSizeHid];
 
-            bool maniaMode = OnMultiTouch != null;
+            bool maniaMode = OnMultiTouch != null || OnContactUpdate != null;
 
             for (int r = 0; r < dwCount; r++)
             {

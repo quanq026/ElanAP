@@ -26,12 +26,14 @@ namespace ElanAP.Controls
 
         public Task Log(string text)
         {
+            string line = Prefix + text;
+            App.WriteLog(text);
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (BufferEmpty)
-                    Buffer.Text += Prefix + text;
+                    Buffer.Text += line;
                 else
-                    Buffer.Text += Environment.NewLine + Prefix + text;
+                    Buffer.Text += Environment.NewLine + line;
                 Buffer.CaretIndex = Buffer.Text.Length;
                 Scroller.ScrollToEnd();
                 var sh = Status;

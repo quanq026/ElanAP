@@ -77,21 +77,26 @@ namespace ElanAP
 
         private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0)
+            try
             {
-                int msg = (int)wParam;
-                // Block ALL non-injected mouse events (move, buttons, scroll)
-                // This prevents Windows from interpreting multi-finger gestures as right-click etc.
-                if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
-                    msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP ||
-                    msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP ||
-                    msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL ||
-                    msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP)
+                if (nCode >= 0)
                 {
-                    var info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                    if ((info.flags & LLMHF_INJECTED) == 0)
-                        return (IntPtr)1; // block hardware mouse event
+                    int msg = (int)wParam;
+                    if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
+                        msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP ||
+                        msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP ||
+                        msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL ||
+                        msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP)
+                    {
+                        var info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                        if ((info.flags & LLMHF_INJECTED) == 0)
+                            return (IntPtr)1;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("CRASH MouseHookCallback: " + ex);
             }
             return CallNextHookEx(_hookId, nCode, wParam, lParam);
         }
@@ -159,18 +164,22 @@ namespace ElanAP
 
         private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0)
+            try
             {
-                var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
+                if (nCode >= 0)
+                {
+                    var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
 
-                // Always block Win key (physical or injected)
-                if (info.vkCode == VK_LWIN || info.vkCode == VK_RWIN)
-                    return (IntPtr)1;
+                    if (info.vkCode == VK_LWIN || info.vkCode == VK_RWIN)
+                        return (IntPtr)1;
 
-                // Block all injected keyboard events that aren't from our SendInput
-                // This catches PTP gesture shortcuts (Shift, Ctrl, Alt, Tab combos, etc.)
-                if ((info.flags & LLKHF_INJECTED) != 0 && info.dwExtraInfo != EXTRAINFO_MARKER)
-                    return (IntPtr)1;
+                    if ((info.flags & LLKHF_INJECTED) != 0 && info.dwExtraInfo != EXTRAINFO_MARKER)
+                        return (IntPtr)1;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("CRASH KeyboardHookCallback: " + ex);
             }
             return CallNextHookEx(_kbHookId, nCode, wParam, lParam);
         }
@@ -380,17 +389,25 @@ namespace ElanAP
 
         private IntPtr InputWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if (msg == WM_INPUT_MSG)
+            try
             {
-                API.ProcessRawInput(lParam);
-                return IntPtr.Zero;
+                if (msg == WM_INPUT_MSG)
+                {
+                    API.ProcessRawInput(lParam);
+                    return IntPtr.Zero;
+                }
+                if (msg == WM_CLOSE_MSG)
+                {
+                    PostQuitMessage(0);
+                    return IntPtr.Zero;
+                }
+                return DefWindowProc(hWnd, msg, wParam, lParam);
             }
-            if (msg == WM_CLOSE_MSG)
+            catch (Exception ex)
             {
-                PostQuitMessage(0);
-                return IntPtr.Zero;
+                App.WriteLog("CRASH InputWndProc: " + ex);
+                return DefWindowProc(hWnd, msg, wParam, lParam);
             }
-            return DefWindowProc(hWnd, msg, wParam, lParam);
         }
 
         [DllImport("winmm.dll")]
@@ -469,6 +486,7 @@ namespace ElanAP
             }
             catch (Exception ex)
             {
+                App.WriteLog("INPUT THREAD CRASH: " + ex);
                 FireOutput("Input thread error: " + ex.Message);
             }
             finally
@@ -712,6 +730,18 @@ namespace ElanAP
         /// <summary>Fires immediately for each individual HID contact report — no frame-boundary wait.</summary>
         private void HandleContactUpdate(int id, int x, int y, bool isDown)
         {
+            try
+            {
+                HandleContactUpdateCore(id, x, y, isDown);
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("CRASH HandleContactUpdate(id=" + id + " x=" + x + " y=" + y + " down=" + isDown + " trackCount=" + _trackCount + "): " + ex);
+            }
+        }
+
+        private void HandleContactUpdateCore(int id, int x, int y, bool isDown)
+        {
             long startTicks = 0;
             if (PerfEnabled && _handlerWatch != null)
                 startTicks = _handlerWatch.ElapsedTicks;
@@ -808,6 +838,18 @@ namespace ElanAP
         /// <summary>Called at frame boundary — clean up stale contacts and fire visual feedback.</summary>
         private void HandleFrameComplete()
         {
+            try
+            {
+                HandleFrameCompleteCore();
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("CRASH HandleFrameComplete(trackCount=" + _trackCount + "): " + ex);
+            }
+        }
+
+        private void HandleFrameCompleteCore()
+        {
             // Check for stale contacts (not reported in this frame — e.g. contactCount decreased)
             for (int i = _trackCount - 1; i >= 0; i--)
             {
@@ -849,6 +891,18 @@ namespace ElanAP
 
         /// <summary>Called when contactCount=0 and previous frame had contacts — all fingers lifted.</summary>
         private void HandleAllContactsLifted()
+        {
+            try
+            {
+                HandleAllContactsLiftedCore();
+            }
+            catch (Exception ex)
+            {
+                App.WriteLog("CRASH HandleAllContactsLifted: " + ex);
+            }
+        }
+
+        private void HandleAllContactsLiftedCore()
         {
             int zoneCount = _zoneVk.Length;
             for (int z = 0; z < zoneCount; z++)

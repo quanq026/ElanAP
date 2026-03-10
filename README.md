@@ -1,9 +1,5 @@
 # ElanAP — Touchpad Absolute Positioning for osu!
 
-Turns any **Windows Precision Touchpad** into a drawing tablet. Maps touchpad coordinates directly to screen position — no more relative cursor movement.
-
-Works with **Elan, Synaptics PTP, ALPS**, and any other HID Precision Touchpad.
-
 ## Requirements
 
 - Windows 10/11

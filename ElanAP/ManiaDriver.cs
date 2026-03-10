@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading;
 using ElanAP.Devices;
-using Microsoft.Win32;
 
 namespace ElanAP
 {
@@ -256,84 +255,13 @@ namespace ElanAP
 
         #endregion
 
-        #region Touchpad Gesture Disable
+        #region Touchpad Gesture Suppression
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
-
-        private const uint WM_SETTINGCHANGE = 0x001A;
-        private const uint SMTO_ABORTIFHUNG = 0x0002;
-        private static readonly IntPtr HWND_BROADCAST = (IntPtr)0xFFFF;
-
-        private Dictionary<string, object> _savedGestureSettings = new Dictionary<string, object>();
-
-        private void DisableTouchpadGestures()
-        {
-            try
-            {
-                var key = Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", true);
-                if (key == null)
-                {
-                    FireOutput("Warning: PrecisionTouchPad registry key not found.");
-                    return;
-                }
-
-                string[] values = {
-                    "TapsEnabled", "RightClickZoneEnabled",
-                    "ThreeFingerTapEnabled", "ThreeFingerSlideEnabled",
-                    "FourFingerTapEnabled", "FourFingerSlideEnabled",
-                    "PanEnabled", "ZoomEnabled",
-                    "ScrollingEnabled"
-                };
-
-                foreach (var v in values)
-                {
-                    _savedGestureSettings[v] = key.GetValue(v); // null if not present
-                    key.SetValue(v, 0, RegistryValueKind.DWord);
-                }
-                key.Close();
-
-                // Notify system of settings change
-                IntPtr result;
-                SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 1000, out result);
-
-                FireOutput("Touchpad gestures disabled.");
-            }
-            catch (Exception ex)
-            {
-                FireOutput("Warning: Could not disable gestures: " + ex.Message);
-            }
-        }
-
-        private void RestoreTouchpadGestures()
-        {
-            try
-            {
-                var key = Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad", true);
-                if (key == null) return;
-
-                foreach (var kvp in _savedGestureSettings)
-                {
-                    if (kvp.Value != null)
-                        key.SetValue(kvp.Key, kvp.Value, RegistryValueKind.DWord);
-                    else
-                        key.DeleteValue(kvp.Key, false);
-                }
-                key.Close();
-                _savedGestureSettings.Clear();
-
-                IntPtr result;
-                SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 1000, out result);
-
-                FireOutput("Touchpad gestures restored.");
-            }
-            catch (Exception ex)
-            {
-                FireOutput("Warning: Could not restore gestures: " + ex.Message);
-            }
-        }
+        // Gestures are suppressed entirely through hooks (no registry changes needed):
+        // - Mouse hook: blocks touchpad cursor movement and clicks
+        // - Keyboard hook: blocks injected gesture shortcuts (3/4 finger swipe = Win+Tab etc.)
+        // - Raw Input: touchpad data is consumed directly, bypassing gesture recognition
+        // This approach is crash-safe — no persistent system changes that need cleanup.
 
         #endregion
 
@@ -663,16 +591,14 @@ namespace ElanAP
                 API.EnablePerformanceTracking(true);
             }
 
-            DisableTouchpadGestures();
-
             // Start dedicated high-priority input thread
             // This thread creates a hidden window, registers Raw Input, installs hooks,
             // and runs its own message pump — completely decoupled from WPF UI thread.
+            // Hooks suppress all gesture side-effects (cursor, injected shortcuts).
             StartInputThread();
 
             if (!_inputStartedOK)
             {
-                RestoreTouchpadGestures();
                 FireOutput("Failed to start input thread.");
                 return;
             }
@@ -686,8 +612,6 @@ namespace ElanAP
             // Signal input thread to stop — it handles all cleanup:
             // unhook, unregister raw input, release held keys, destroy window
             StopInputThread();
-
-            RestoreTouchpadGestures();
 
             // Clear visual feedback
             var zoneHandler = ActiveZonesChanged;

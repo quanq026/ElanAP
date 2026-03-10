@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -156,33 +157,45 @@ namespace ElanAP
 
         private void Init()
         {
+            FireOutput("Scanning HID devices...");
+            int deviceIndex = 0;
             foreach (var d in DeviceList.Local.GetHidDevices())
             {
                 try
                 {
+                    string name = "";
+                    try { name = d.GetFriendlyName(); } catch { name = "(no name)"; }
                     var desc = d.GetReportDescriptor();
                     foreach (var item in desc.DeviceItems)
                     {
+                        var usages = new List<string>();
+                        foreach (uint enc in item.Usages.GetAllValues())
+                            usages.Add("0x" + enc.ToString("X8"));
+
+                        FireOutput("  [" + deviceIndex + "] " + name
+                            + " VID:0x" + d.VendorID.ToString("X4")
+                            + " PID:0x" + d.ProductID.ToString("X4")
+                            + " Usages: " + string.Join(", ", usages));
+
                         foreach (uint enc in item.Usages.GetAllValues())
                         {
-                            if (enc == 0x000D0005u)
+                            if (enc == 0x000D0005u) // Precision Touchpad
                             {
                                 _device = d;
                                 _touchpadItem = item;
                                 _descriptor = desc;
                                 _parser = item.CreateDeviceItemInputParser();
                                 ExtractRanges(item);
-                                FireOutput("API initialized. Device: " + d.GetFriendlyName()
-                                    + "  X:[" + X_Lo + "," + X_Hi + "]"
-                                    + "  Y:[" + Y_Lo + "," + Y_Hi + "]");
+                                FireOutput("=> Selected as touchpad. X:[" + X_Lo + "," + X_Hi + "] Y:[" + Y_Lo + "," + Y_Hi + "]");
                                 return;
                             }
                         }
                     }
                 }
                 catch { }
+                deviceIndex++;
             }
-            throw new Exception("No HID Precision Touchpad found. Ensure Elan driver is installed.");
+            throw new Exception("No HID Precision Touchpad found (usage 0x000D0005). Check console log for detected devices.");
         }
 
         private void ExtractRanges(DeviceItem item)

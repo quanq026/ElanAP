@@ -1,8 +1,35 @@
+# Build output
 bin/
 obj/
+
+# Visual Studio
 *.user
 *.suo
 *.cache
 *.log
-TestResults/
 .vs/
+TestResults/
+*.rsuser
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.opendb
+
+# NuGet
+packages/
+*.nupkg
+**/[Pp]ackages/[Bb]uild/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

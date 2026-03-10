@@ -4,7 +4,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="520" d:DesignWidth="760">
+             d:DesignHeight="520"
+        d:DesignWidth="760">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -14,48 +15,96 @@
         </Grid.RowDefinitions>
 
         <!-- Key Count selector -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,6">
-            <TextBlock Text="Keys:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="KeyCountCombo" Width="55" SelectionChanged="KeyCountChanged">
+        <StackPanel Grid.Row="0"
+                Orientation="Horizontal"
+                Margin="8,6">
+            <TextBlock Text="Keys:"
+                    VerticalAlignment="Center"
+                    Margin="0,0,6,0"/>
+            <ComboBox x:Name="KeyCountCombo"
+                    Width="55"
+                    SelectionChanged="KeyCountChanged">
                 <ComboBoxItem Content="2"/>
                 <ComboBoxItem Content="3"/>
-                <ComboBoxItem Content="4" IsSelected="True"/>
+                <ComboBoxItem Content="4"
+                        IsSelected="True"/>
                 <ComboBoxItem Content="5"/>
                 <ComboBoxItem Content="6"/>
                 <ComboBoxItem Content="7"/>
             </ComboBox>
-            <TextBlock Text="  Layout:" VerticalAlignment="Center" Margin="12,0,6,0"/>
-            <ComboBox x:Name="LayoutCombo" Width="110" SelectionChanged="LayoutChanged">
-                <ComboBoxItem Content="Vertical" IsSelected="True"/>
+            <TextBlock Text="  Layout:"
+                    VerticalAlignment="Center"
+                    Margin="12,0,6,0"/>
+            <ComboBox x:Name="LayoutCombo"
+                    Width="110"
+                    SelectionChanged="LayoutChanged">
+                <ComboBoxItem Content="Vertical"
+                        IsSelected="True"/>
                 <ComboBoxItem Content="Horizontal"/>
             </ComboBox>
-            <TextBlock Text="  Preset:" VerticalAlignment="Center" Margin="12,0,6,0"/>
-            <ComboBox x:Name="PresetCombo" Width="110" SelectionChanged="PresetChanged">
-                <ComboBoxItem Content="Custom" IsSelected="True"/>
-                <ComboBoxItem Content="Full Area"/>
+            <TextBlock Text="  Preset:"
+                    VerticalAlignment="Center"
+                    Margin="12,0,6,0"/>
+            <ComboBox x:Name="PresetCombo"
+                    Width="110"
+                    SelectionChanged="PresetChanged">
+                <ComboBoxItem Content="Full Area"
+                        IsSelected="True"/>
                 <ComboBoxItem Content="Bottom Half"/>
                 <ComboBoxItem Content="Center 75%"/>
             </ComboBox>
+            <Button Content="Reset"
+                    Margin="12,0,0,0"
+                    Padding="8,0"
+                    Click="ResetZones"
+                    ToolTip="Reset zones to default for current preset"/>
         </StackPanel>
 
         <!-- Visual touchpad with zones -->
-        <Border Grid.Row="1" Margin="8,2,8,4" BorderBrush="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderThickness="1">
-            <Canvas x:Name="ZoneCanvas" Background="Transparent" SizeChanged="ZoneCanvas_SizeChanged"/>
+        <Border Grid.Row="1"
+                Margin="8,2,8,4"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}"
+                BorderThickness="1">
+            <Canvas x:Name="ZoneCanvas"
+                    Background="Transparent"
+                    SizeChanged="ZoneCanvas_SizeChanged"/>
         </Border>
 
         <!-- Per-zone key bindings -->
-        <Border Grid.Row="2" Margin="8,0,8,4" BorderBrush="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderThickness="1" Padding="4">
-            <StackPanel Orientation="Horizontal" x:Name="KeyBindPanel" HorizontalAlignment="Center"/>
+        <Border Grid.Row="2"
+                Margin="8,0,8,4"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}"
+                BorderThickness="1"
+                Padding="4">
+            <StackPanel Orientation="Horizontal"
+                    x:Name="KeyBindPanel"
+                    HorizontalAlignment="Center"/>
         </Border>
 
         <!-- Start/Stop -->
-        <Grid Grid.Row="3" Margin="0,0,0,4">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Button x:Name="ManiaStartButton" Content="Start Mania" Click="StartMania"
-                    Width="110" Height="24" Margin="5,0"/>
-                <Button x:Name="ManiaStopButton" Content="Stop Mania" Click="StopMania"
-                    Width="110" Height="24" Margin="5,0" IsEnabled="False"/>
-                <TextBlock Text="F6 = toggle (shared)" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="Gray" FontSize="11"/>
+        <Grid Grid.Row="3"
+                Margin="0,0,0,4">
+            <StackPanel Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Button x:Name="ManiaStartButton"
+                        Content="Start Mania"
+                        Click="StartMania"
+                        Width="110"
+                        Height="24"
+                        Margin="5,0"/>
+                <Button x:Name="ManiaStopButton"
+                        Content="Stop Mania"
+                        Click="StopMania"
+                        Width="110"
+                        Height="24"
+                        Margin="5,0"
+                        IsEnabled="False"/>
+                <TextBlock Text="F6 = toggle (shared)"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0"
+                        Foreground="Gray"
+                        FontSize="11"/>
             </StackPanel>
         </Grid>
     </Grid>

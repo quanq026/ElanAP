@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Security;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -14,8 +15,19 @@ namespace ElanAP
 
         private static readonly object _logLock = new object();
 
+        private static Mutex _singleInstanceMutex;
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            bool createdNew;
+            _singleInstanceMutex = new Mutex(true, "ElanAP_SingleInstance_8F3A2B", out createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("ElanAP is already running.", "ElanAP", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
 
             // Catch unhandled exceptions on UI thread

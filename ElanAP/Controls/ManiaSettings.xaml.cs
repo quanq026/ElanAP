@@ -23,6 +23,7 @@ namespace ElanAP.Controls
         private bool _vertical = true; // true = vertical columns (mania-style)
         private List<Zone> _zones = new List<Zone>();
         private string[] _defaultKeys = { "Z", "X", "C", "V", "A", "S", "D" };
+        private bool _suppressEvents;
 
         // Zone area on touchpad (subset of full touchpad, like "bottom half")
         private Area _zoneRegion;
@@ -66,6 +67,7 @@ namespace ElanAP.Controls
             _zones = zones;
             _keyCount = zones.Count;
 
+            _suppressEvents = true;
             // Set combo to match
             for (int i = 0; i < KeyCountCombo.Items.Count; i++)
             {
@@ -76,6 +78,8 @@ namespace ElanAP.Controls
                     break;
                 }
             }
+            PresetCombo.SelectedIndex = 0; // Full Area
+            _suppressEvents = false;
 
             RebuildKeyBindPanel();
             DrawZones();
@@ -156,7 +160,10 @@ namespace ElanAP.Controls
             var tb = (TextBox)sender;
             int idx = (int)tb.Tag;
             if (idx >= 0 && idx < _zones.Count)
+            {
                 _zones[idx].Key = tb.Text.Trim().ToUpperInvariant();
+                DrawZones();
+            }
         }
 
         private void DrawZones()
@@ -234,7 +241,7 @@ namespace ElanAP.Controls
 
         private void KeyCountChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!IsLoaded || KeyCountCombo.SelectedItem == null) return;
+            if (!IsLoaded || _suppressEvents || KeyCountCombo.SelectedItem == null) return;
             var item = (ComboBoxItem)KeyCountCombo.SelectedItem;
             int count;
             if (int.TryParse(item.Content.ToString(), out count))
@@ -246,27 +253,27 @@ namespace ElanAP.Controls
 
         private void LayoutChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!IsLoaded) return;
+            if (!IsLoaded || _suppressEvents) return;
             _vertical = LayoutCombo.SelectedIndex == 0;
             RebuildZones();
         }
 
         private void PresetChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!IsLoaded || _touchpadBounds == null || PresetCombo.SelectedIndex <= 0) return;
+            if (!IsLoaded || _suppressEvents || _touchpadBounds == null) return;
 
             double tw = _touchpadBounds.Width;
             double th = _touchpadBounds.Height;
 
             switch (PresetCombo.SelectedIndex)
             {
-                case 1: // Full Area
+                case 0: // Full Area
                     _zoneRegion = new Area(tw, th, new Point(0, 0));
                     break;
-                case 2: // Bottom Half
+                case 1: // Bottom Half
                     _zoneRegion = new Area(tw, th / 2, new Point(0, th / 2));
                     break;
-                case 3: // Center 75%
+                case 2: // Center 75%
                     _zoneRegion = new Area(tw * 0.75, th * 0.75, new Point(tw * 0.125, th * 0.125));
                     break;
             }
@@ -303,6 +310,27 @@ namespace ElanAP.Controls
         {
             var h = StopRequested;
             if (h != null) h();
+        }
+
+        private void ResetZones(object sender, RoutedEventArgs e)
+        {
+            if (_touchpadBounds == null) return;
+            // Reset zone region based on current preset selection
+            double tw = _touchpadBounds.Width;
+            double th = _touchpadBounds.Height;
+            switch (PresetCombo.SelectedIndex)
+            {
+                case 1: // Bottom Half
+                    _zoneRegion = new Area(tw, th / 2, new Point(0, th / 2));
+                    break;
+                case 2: // Center 75%
+                    _zoneRegion = new Area(tw * 0.75, th * 0.75, new Point(tw * 0.125, th * 0.125));
+                    break;
+                default: // Full Area
+                    _zoneRegion = new Area(tw, th, new Point(0, 0));
+                    break;
+            }
+            RebuildZones();
         }
 
         public void SetRunningState(bool running)

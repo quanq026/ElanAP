@@ -56,6 +56,9 @@ namespace ElanAP
         private LowLevelMouseProc _mouseProc;
         private IntPtr _hookId = IntPtr.Zero;
 
+        // Timestamp of last touchpad Raw Input — used to distinguish touchpad from USB mouse
+        private volatile int _lastTouchpadInputTick;
+
         private void InstallMouseHook()
         {
             _mouseProc = MouseHookCallback;
@@ -92,7 +95,14 @@ namespace ElanAP
                         msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP)
                     {
                         var info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                        if ((info.flags & LLMHF_INJECTED) == 0)
+                        // Allow injected events (from software)
+                        if ((info.flags & LLMHF_INJECTED) != 0)
+                            return CallNextHookEx(_hookId, nCode, wParam, lParam);
+
+                        // Block only if touchpad was active recently (within 100ms)
+                        // This allows USB/external mice to work normally
+                        int elapsed = Environment.TickCount - _lastTouchpadInputTick;
+                        if (elapsed >= 0 && elapsed < 100)
                             return (IntPtr)1;
                     }
                 }
@@ -198,6 +208,9 @@ namespace ElanAP
 
         [DllImport("user32.dll")]
         private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
+        [DllImport("user32.dll")]
+        private static extern short VkKeyScan(char ch);
 
         private const uint MAPVK_VK_TO_VSC = 0;
 
@@ -400,6 +413,7 @@ namespace ElanAP
             {
                 if (msg == WM_INPUT_MSG)
                 {
+                    _lastTouchpadInputTick = Environment.TickCount;
                     API.ProcessRawInput(lParam);
                     return IntPtr.Zero;
                 }
@@ -999,8 +1013,17 @@ namespace ElanAP
                 case "RBRACKET": return 0xDD;
                 case "QUOTE": return 0xDE;
                 case "BACKQUOTE": case "TILDE": return 0xC0;
-                default: return 0;
             }
+
+            // Single character — use VkKeyScan for symbols like , . ; / etc.
+            if (name.Length == 1)
+            {
+                short vks = VkKeyScan(name[0]);
+                if (vks != -1)
+                    return (ushort)(vks & 0xFF);
+            }
+
+            return 0;
         }
 
         public static readonly string[] CommonKeys = new string[]

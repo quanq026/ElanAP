@@ -49,6 +49,10 @@ namespace ElanAP
             Driver.Output += Console.Log;
             Driver.Status += StatusUpdate;
 
+            ManiaDriver = new ManiaDriver(API);
+            ManiaDriver.Output += Console.Log;
+            ManiaDriver.Status += StatusUpdate;
+
             Screen = new Screen();
             Touchpad = new Touchpad(API);
 
@@ -62,6 +66,14 @@ namespace ElanAP
 
             ScreenMapArea.AreaDragged += OnScreenAreaDragged;
             TouchpadMapArea.AreaDragged += OnTouchpadAreaDragged;
+
+            // Initialize Mania panel
+            ManiaPanel.Initialize(TouchpadRes);
+            if (Config.ManiaZones != null && Config.ManiaZones.Count > 0)
+                ManiaPanel.LoadZones(Config.ManiaZones);
+            ManiaPanel.StartRequested += StartManiaDriver;
+            ManiaPanel.StopRequested += StopManiaDriver;
+            ManiaPanel.SetRunningState(false);
 
             if (RegisterHotKey(_hwnd, HOTKEY_ID, 0, VK_F6))
                 Console.Log("Global hotkey F6 registered for Start/Stop toggle.");
@@ -81,8 +93,13 @@ namespace ElanAP
             }
             else if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
+                // F6 toggles whichever mode is active, or starts based on selected tab
                 if (Driver.IsActive)
                     StopDriverButton();
+                else if (ManiaDriver.IsActive)
+                    StopManiaDriver();
+                else if (MainTabs.SelectedIndex == 1) // Mania tab
+                    StartManiaDriver();
                 else
                     StartDriverButton();
                 handled = true;
@@ -97,6 +114,7 @@ namespace ElanAP
 
         private API API { get; set; }
         private Driver Driver { get; set; }
+        private ManiaDriver ManiaDriver { get; set; }
 
         private Screen Screen { get; set; }
         private Touchpad Touchpad { get; set; }
@@ -131,6 +149,39 @@ namespace ElanAP
                 Driver.Stop();
                 StartButton.IsEnabled = true;
                 StopButton.IsEnabled = false;
+            }
+        }
+
+        private void StartManiaDriver()
+        {
+            if (ManiaDriver.IsActive || Driver.IsActive) return;
+
+            // Save zones to config
+            Config.ManiaZones = ManiaPanel.GetZones();
+
+            ManiaDriver.TouchpadDevice = Touchpad;
+            ManiaDriver.Zones = Config.ManiaZones;
+            ManiaDriver.PerfEnabled = true; // Enable performance tracking for debugging
+            ManiaDriver.VisualFeedbackEnabled = false; // Disable UI updates for minimum latency
+            ManiaDriver.Start(_hwnd);
+
+            if (ManiaDriver.IsActive)
+            {
+                ManiaDriver.ActiveZonesChanged += ManiaPanel.HighlightZones;
+                ManiaPanel.SetRunningState(true);
+                StartButton.IsEnabled = false; // disable std start while mania active
+            }
+        }
+
+        private void StopManiaDriver()
+        {
+            if (ManiaDriver.IsActive)
+            {
+                ManiaDriver.ActiveZonesChanged -= ManiaPanel.HighlightZones;
+                ManiaDriver.Stop();
+                ManiaPanel.HighlightZones(new int[0]);
+                ManiaPanel.SetRunningState(false);
+                StartButton.IsEnabled = API.IsAvailable;
             }
         }
 
@@ -315,6 +366,11 @@ namespace ElanAP
             }
         }
 
+        private void StartDriverButton()
+        {
+            StartDriverButton(null, null);
+        }
+
         private void ShowAbout(object sender = null, EventArgs e = null)
         {
             new Windows.AboutBox().Show();
@@ -333,11 +389,17 @@ namespace ElanAP
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
+            if (ManiaDriver != null && ManiaDriver.IsActive)
+                ManiaDriver.Stop();
             if (Driver != null && Driver.IsActive)
                 Driver.Stop();
             UnregisterHotKey(_hwnd, HOTKEY_ID);
             if (NotifyIcon != null)
                 NotifyIcon.Dispose();
+
+            // Save mania zones to config on close
+            if (ManiaPanel != null)
+                Config.ManiaZones = ManiaPanel.GetZones();
         }
 
         #endregion

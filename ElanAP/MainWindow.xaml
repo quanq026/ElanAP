@@ -22,8 +22,8 @@
                 <MenuItem Header="Exit" Click="ExitApp"/>
             </MenuItem>
         </Menu>
-        <TabControl Margin="0,18">
-            <TabItem Header="Settings">
+        <TabControl x:Name="MainTabs" Margin="0,18">
+            <TabItem Header="Standard">
                 <Grid x:Name="SettingsPanel">
                     <Grid.RowDefinitions>
                         <RowDefinition/>
@@ -166,6 +166,9 @@
                         </StackPanel>
                     </Grid>
                 </Grid>
+            </TabItem>
+            <TabItem Header="Mania">
+                <control:ManiaSettings x:Name="ManiaPanel" Margin="0"/>
             </TabItem>
             <TabItem Header="Console">
                 <control:Console x:Name="Console" Status="StatusUpdate" Margin="-2"/>

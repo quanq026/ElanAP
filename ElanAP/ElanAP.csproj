@@ -71,8 +71,10 @@
     <Compile Include="Devices\Screen.cs" />
     <Compile Include="Devices\Touchpad.cs" />
     <Compile Include="Driver.cs" />
+    <Compile Include="ManiaDriver.cs" />
     <Compile Include="NotifyIcon.cs" />
     <Compile Include="Point.cs" />
+    <Compile Include="Zone.cs" />
     <Compile Include="Tools\ConvertHelper.cs" />
     <Compile Include="Tools\Info.cs" />
     <Compile Include="Tools\ReadHelper.cs" />
@@ -85,6 +87,13 @@
     </Page>
     <Compile Include="Controls\Console.xaml.cs">
       <DependentUpon>Console.xaml</DependentUpon>
+    </Compile>
+    <Page Include="Controls\ManiaSettings.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="Controls\ManiaSettings.xaml.cs">
+      <DependentUpon>ManiaSettings.xaml</DependentUpon>
     </Compile>
     <Page Include="Controls\MapArea.xaml">
       <Generator>MSBuild:Compile</Generator>

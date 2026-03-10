@@ -7,17 +7,22 @@
              mc:Ignorable="d"
              d:DesignWidth="800" d:DesignHeight="450">
     <Grid>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="Buffer" Padding="2"
-                       Foreground="White" Background="Black"
-                       FontFamily="Lucida Console">
-                <TextBlock.ContextMenu>
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto">
+            <TextBox x:Name="Buffer" Padding="2"
+                     Foreground="White" Background="Black"
+                     FontFamily="Lucida Console"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     BorderThickness="0"
+                     AcceptsReturn="True">
+                <TextBox.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Copy all" Click="Copy"/>
+                        <MenuItem Header="Copy all" Click="CopyAll"/>
+                        <MenuItem Header="Copy selection" Click="CopySelection"/>
                         <MenuItem Header="Clear" Click="Clear"/>
                     </ContextMenu>
-                </TextBlock.ContextMenu>
-            </TextBlock>
+                </TextBox.ContextMenu>
+            </TextBox>
         </ScrollViewer>
     </Grid>
 </UserControl>

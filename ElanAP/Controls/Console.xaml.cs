@@ -26,12 +26,14 @@ namespace ElanAP.Controls
 
         public Task Log(string text)
         {
-            Dispatcher.Invoke(new Action(() =>
+            Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (BufferEmpty)
                     Buffer.Text += Prefix + text;
                 else
                     Buffer.Text += Environment.NewLine + Prefix + text;
+                Buffer.CaretIndex = Buffer.Text.Length;
+                Scroller.ScrollToEnd();
                 var sh = Status;
                 if (sh != null) sh(this, text);
             }));
@@ -52,7 +54,12 @@ namespace ElanAP.Controls
             return Task.CompletedTask;
         }
 
-        public void Copy(object sender, EventArgs e) { Clipboard.SetText(Buffer.Text); }
+        public void CopyAll(object sender, EventArgs e) { Clipboard.SetText(Buffer.Text); }
+        public void CopySelection(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(Buffer.SelectedText))
+                Clipboard.SetText(Buffer.SelectedText);
+        }
         public async void Clear(object sender, EventArgs e) { await Clear(); }
     }
 }

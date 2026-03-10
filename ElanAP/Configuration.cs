@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -12,12 +13,14 @@ namespace ElanAP
         {
             Touchpad = new Area();
             Screen = new Area();
+            ManiaZones = new List<Zone>();
         }
 
         public Configuration(Area touchpad, Area screen)
         {
             Touchpad = touchpad;
             Screen = screen;
+            ManiaZones = new List<Zone>();
         }
 
         public Area Touchpad
@@ -52,6 +55,17 @@ namespace ElanAP
             get { return _lockaspectratio; }
         }
         private bool _lockaspectratio;
+
+        public List<Zone> ManiaZones
+        {
+            set
+            {
+                _maniaZones = value;
+                NotifyPropertyChanged();
+            }
+            get { return _maniaZones; }
+        }
+        private List<Zone> _maniaZones;
 
         #region File Management
 

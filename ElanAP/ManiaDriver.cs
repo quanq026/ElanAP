@@ -276,6 +276,9 @@ namespace ElanAP
         [DllImport("user32.dll")]
         private static extern bool DestroyWindow(IntPtr hwnd);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern bool UnregisterClass(string lpClassName, IntPtr hInstance);
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -468,6 +471,7 @@ namespace ElanAP
                     DestroyWindow(_inputHwnd);
                     _inputHwnd = IntPtr.Zero;
                 }
+                UnregisterClass("ElanAP_ManiaInput", GetModuleHandle(null));
             }
         }
 

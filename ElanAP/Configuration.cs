@@ -67,6 +67,17 @@ namespace ElanAP
         }
         private List<Zone> _maniaZones;
 
+        public int SelectedTab
+        {
+            set
+            {
+                _selectedTab = value;
+                NotifyPropertyChanged();
+            }
+            get { return _selectedTab; }
+        }
+        private int _selectedTab;
+
         #region File Management
 
         private static XmlSerializer Serializer = new XmlSerializer(typeof(Configuration));

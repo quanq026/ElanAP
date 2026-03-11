@@ -86,13 +86,11 @@ namespace ElanAP
         private byte[] _rawBuffer;
         private byte[] _reportBuffer;
 
-        // Cached value indices (discovered on first parse, avoids GetAllValues iteration)
         private bool _indicesCached;
         private int _tipSwitchIdx = -1;
         private int _xIdx = -1;
         private int _yIdx = -1;
 
-        // Multi-touch cached indices: parallel arrays for each contact slot
         private bool _multiIndicesCached;
         private int _contactCountIdx = -1;
         private int[] _mtTipIdx;   // tipSwitch per contact
@@ -101,15 +99,29 @@ namespace ElanAP
         private int[] _mtIdIdx;    // contactID per contact
         private int _maxContacts;
 
-        // Batch accumulation for multi-touch: collect contacts across WM_INPUT messages until frame complete
-        private TouchContact[] _batchContacts;      // pre-allocated array
-        private int _batchCount;                     // current number of active contacts in batch
-        private int _expectedContactCount;           // contactCount from first report in frame
-        private int _reportedContactSlots;           // how many individual contact reports received (1 per HID report in hybrid mode)
-        private bool _frameStarted;                  // whether we've seen contactCount > 0 for current frame
-        private bool _hadContacts;                   // track if last frame had contacts (for detecting all-lift)
+        private TouchContact[] _batchContacts;
+        private int _batchCount;
+        private int _expectedContactCount;
+        private int _reportedContactSlots;
+        private bool _frameStarted;
+        private bool _hadContacts;
 
-        // Persistent unmanaged buffer for GetRawInputData (avoids AllocHGlobal per WM_INPUT)
+        // Direct byte parsing — bypasses HidSharp on hot path (zero-alloc)
+        private struct DirectField
+        {
+            public int BitOffset;
+            public int BitSize;
+            public bool IsSigned;
+        }
+        private bool _directReady;
+        private bool _useReportId;
+        private byte _expectedReportId;
+        private DirectField[] _directTip;
+        private DirectField[] _directX;
+        private DirectField[] _directY;
+        private DirectField[] _directId;
+        private DirectField _directContactCount;
+
         private IntPtr _unmanagedBuffer = IntPtr.Zero;
         private int _unmanagedBufferSize;
 
@@ -240,6 +252,7 @@ namespace ElanAP
             _running = true;
             _indicesCached = false; // re-discover on next parse
             _multiIndicesCached = false;
+            _directReady = false;
             _batchCount = 0;
             _expectedContactCount = 0;
             _reportedContactSlots = 0;
@@ -270,7 +283,6 @@ namespace ElanAP
             rid[0].hwndTarget = IntPtr.Zero;
             RegisterRawInputDevices(rid, 1, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
 
-            // Free persistent unmanaged buffer
             if (_unmanagedBuffer != IntPtr.Zero)
             {
                 Marshal.FreeHGlobal(_unmanagedBuffer);
@@ -293,7 +305,6 @@ namespace ElanAP
             GetRawInputData(lParam, RID_INPUT, IntPtr.Zero, ref dwSize, _headerSize);
             if (dwSize == 0) return;
 
-            // Reuse persistent unmanaged buffer — grow only if needed (no per-frame alloc)
             if (_unmanagedBuffer == IntPtr.Zero || _unmanagedBufferSize < (int)dwSize)
             {
                 if (_unmanagedBuffer != IntPtr.Zero)
@@ -334,7 +345,6 @@ namespace ElanAP
                 ParseReport(_reportBuffer, maniaMode);
             }
 
-            // Fire batched multi-touch event if frame is complete
             if (maniaMode && _frameStarted && _reportedContactSlots >= _expectedContactCount)
             {
                 var fch = OnFrameComplete;
@@ -342,7 +352,6 @@ namespace ElanAP
                 FireMultiTouch();
             }
 
-            // Performance tracking
             if (_perfEnabled && _perfWatch != null)
             {
                 long endTicks = _perfWatch.ElapsedTicks;
@@ -353,7 +362,6 @@ namespace ElanAP
                 if (latency < _minLatencyTicks) _minLatencyTicks = latency;
                 if (latency > _maxLatencyTicks) _maxLatencyTicks = latency;
 
-                // Output stats every second
                 if (endTicks - _lastStatTicks >= Stopwatch.Frequency)
                 {
                     double avgLatencyUs = (_totalLatencyTicks * 1000000.0) / (_statFrameCount * Stopwatch.Frequency);
@@ -387,7 +395,6 @@ namespace ElanAP
                 }
                 else
                 {
-                    // Reuse snapshot array if same size
                     if (_snapshotContacts == null || _snapshotContacts.Length != _batchCount)
                         _snapshotContacts = new TouchContact[_batchCount];
                     Array.Copy(_batchContacts, _snapshotContacts, _batchCount);
@@ -402,6 +409,14 @@ namespace ElanAP
 
         private void ParseReport(byte[] reportBytes, bool maniaMode)
         {
+            if (maniaMode && _directReady)
+            {
+                if (_useReportId && reportBytes[0] != _expectedReportId)
+                    return;
+                CollectMultiTouchDirect(reportBytes);
+                return;
+            }
+
             byte reportId = _descriptor.ReportsUseID ? reportBytes[0] : (byte)0;
             Report report;
             if (!_descriptor.TryGetReport(ReportType.Input, reportId, out report))
@@ -410,7 +425,6 @@ namespace ElanAP
             if (!_parser.TryParseReport(reportBytes, 0, report))
                 return;
 
-            // === Single-touch fast path (for std mode only) ===
             if (!maniaMode && _indicesCached)
             {
                 bool fingerDown = _parser.GetValue(_tipSwitchIdx).GetLogicalValue() != 0;
@@ -429,7 +443,6 @@ namespace ElanAP
                 }
             }
 
-            // === Multi-touch path (for mania mode) — accumulate into batch ===
             if (maniaMode)
             {
                 if (_multiIndicesCached)
@@ -438,7 +451,7 @@ namespace ElanAP
                 }
                 else
                 {
-                    DiscoverMultiTouchIndices();
+                    DiscoverMultiTouchIndices(reportBytes, report);
                 }
             }
             else if (!_indicesCached)
@@ -449,14 +462,12 @@ namespace ElanAP
 
         private void CollectMultiTouchIntoBatch()
         {
-            // Read contactCount — non-zero value marks the start of a new frame
             int reportContactCount = 0;
             if (_contactCountIdx >= 0)
                 reportContactCount = _parser.GetValue(_contactCountIdx).GetLogicalValue();
 
             if (reportContactCount > 0)
             {
-                // New frame starting — fire pending incomplete frame first if any
                 if (_frameStarted && _batchCount > 0)
                     FireMultiTouch();
 
@@ -467,8 +478,6 @@ namespace ElanAP
             }
             else if (_contactCountIdx >= 0 && !_frameStarted && _hadContacts)
             {
-                // contactCount=0 with no active frame but we had contacts before
-                // This means all fingers lifted — fire immediate notification
                 _batchCount = 0;
                 _hadContacts = false;
                 var alh = OnAllContactsLifted;
@@ -479,8 +488,7 @@ namespace ElanAP
 
             if (!_frameStarted) return;
 
-            // In hybrid mode, each HID report contains ONE contact.
-            // Scan slots and count this report as 1 contact slot toward frame completion.
+            // Each HID report = 1 contact in hybrid mode
             bool foundContact = false;
             for (int c = 0; c < _maxContacts; c++)
             {
@@ -491,7 +499,6 @@ namespace ElanAP
                     int cy = _mtYIdx[c] >= 0 ? _parser.GetValue(_mtYIdx[c]).GetLogicalValue() : 0;
                     int cid = _mtIdIdx[c] >= 0 ? _parser.GetValue(_mtIdIdx[c]).GetLogicalValue() : c;
 
-                    // Ensure batch array is large enough
                     if (_batchContacts == null || _batchCount >= _batchContacts.Length)
                     {
                         var newArr = new TouchContact[(_batchContacts == null ? 0 : _batchContacts.Length) + 8];
@@ -511,7 +518,6 @@ namespace ElanAP
                 }
                 else if (_mtTipIdx[c] >= 0)
                 {
-                    // Slot exists but finger not down — fire immediate lift event
                     int cid = _mtIdIdx[c] >= 0 ? _parser.GetValue(_mtIdIdx[c]).GetLogicalValue() : c;
                     var cuh = OnContactUpdate;
                     if (cuh != null) cuh(cid, 0, 0, false);
@@ -520,24 +526,18 @@ namespace ElanAP
                 }
             }
 
-            // Each HID report with contact data = 1 slot toward frame completion
             if (foundContact)
                 _reportedContactSlots++;
         }
 
-        private void DiscoverMultiTouchIndices()
+        private void DiscoverMultiTouchIndices(byte[] reportBytes, Report report)
         {
-            // Scan all values to find multi-touch field layout
-            // Precision Touchpad HID reports contain repeated groups:
-            //   [tipSwitch, contactID, X, Y] × N contacts, followed by contactCount
-
             var tipList = new System.Collections.Generic.List<int>();
             var xList = new System.Collections.Generic.List<int>();
             var yList = new System.Collections.Generic.List<int>();
             var idList = new System.Collections.Generic.List<int>();
             int contactCountIdx = -1;
 
-            // Also discover single-touch indices on first pass
             bool firstTip = true, firstX = true, firstY = true;
 
             for (int i = 0; i < _parser.ValueCount; i++)
@@ -592,7 +592,9 @@ namespace ElanAP
                 FireOutput("Multi-touch indices cached: " + n + " contact slots"
                     + (contactCountIdx >= 0 ? ", contactCount at " + contactCountIdx : ""));
 
-                // Collect first batch
+                // Build direct byte reading fields
+                BuildDirectFields(reportBytes, report);
+
                 CollectMultiTouchIntoBatch();
             }
 
@@ -617,6 +619,150 @@ namespace ElanAP
                 }
             }
         }
+
+        #region Direct Byte Parsing (HidSharp bypass)
+
+        private void BuildDirectFields(byte[] reportBytes, Report report)
+        {
+            try
+            {
+                var bitOffsets = new Dictionary<DataItem, int>();
+                report.Read(reportBytes, 0, (buffer, bitOffset, dataItem, indexOfDataItem) =>
+                {
+                    if (!bitOffsets.ContainsKey(dataItem))
+                        bitOffsets[dataItem] = bitOffset;
+                });
+
+                int n = _maxContacts;
+                _directTip = new DirectField[n];
+                _directX = new DirectField[n];
+                _directY = new DirectField[n];
+                _directId = new DirectField[n];
+                _directContactCount = new DirectField();
+
+                for (int c = 0; c < n; c++)
+                {
+                    if (_mtTipIdx[c] >= 0) _directTip[c] = MakeDirectField(_mtTipIdx[c], bitOffsets);
+                    if (_mtXIdx[c] >= 0) _directX[c] = MakeDirectField(_mtXIdx[c], bitOffsets);
+                    if (_mtYIdx[c] >= 0) _directY[c] = MakeDirectField(_mtYIdx[c], bitOffsets);
+                    if (_mtIdIdx[c] >= 0) _directId[c] = MakeDirectField(_mtIdIdx[c], bitOffsets);
+                }
+                if (_contactCountIdx >= 0)
+                    _directContactCount = MakeDirectField(_contactCountIdx, bitOffsets);
+
+                _useReportId = _descriptor.ReportsUseID;
+                _expectedReportId = _useReportId ? reportBytes[0] : (byte)0;
+                _directReady = true;
+
+                FireOutput("Direct byte parsing enabled: " + n + " contacts, bypassing HidSharp on hot path");
+            }
+            catch (Exception ex)
+            {
+                FireOutput("Warning: Could not build direct fields, using HidSharp fallback: " + ex.Message);
+            }
+        }
+
+        private DirectField MakeDirectField(int parserIdx, Dictionary<DataItem, int> bitOffsets)
+        {
+            var dv = _parser.GetValue(parserIdx);
+            var di = dv.DataItem;
+            int baseBitOffset;
+            if (bitOffsets.TryGetValue(di, out baseBitOffset))
+            {
+                return new DirectField
+                {
+                    BitOffset = baseBitOffset + dv.DataIndex * di.ElementBits,
+                    BitSize = di.ElementBits,
+                    IsSigned = di.IsLogicalSigned
+                };
+            }
+            return new DirectField();
+        }
+
+        private static int ReadBitField(byte[] buf, int bitOff, int bits, bool signed)
+        {
+            int byteOff = bitOff >> 3;
+            int shift = bitOff & 7;
+            int need = (shift + bits + 7) >> 3;
+
+            uint raw = 0;
+            for (int i = 0; i < need; i++)
+                raw |= (uint)buf[byteOff + i] << (i * 8);
+
+            raw = (raw >> shift) & (uint)((1L << bits) - 1);
+
+            if (signed && bits > 1 && (raw & (1u << (bits - 1))) != 0)
+                return (int)(raw | (~0u << bits));
+
+            return (int)raw;
+        }
+
+        private void CollectMultiTouchDirect(byte[] reportBytes)
+        {
+            int reportContactCount = 0;
+            if (_directContactCount.BitSize > 0)
+                reportContactCount = ReadBitField(reportBytes, _directContactCount.BitOffset, _directContactCount.BitSize, false);
+
+            if (reportContactCount > 0)
+            {
+                if (_frameStarted && _batchCount > 0)
+                    FireMultiTouch();
+                _batchCount = 0;
+                _reportedContactSlots = 0;
+                _expectedContactCount = reportContactCount;
+                _frameStarted = true;
+            }
+            else if (_directContactCount.BitSize > 0 && !_frameStarted && _hadContacts)
+            {
+                _batchCount = 0;
+                _hadContacts = false;
+                var alh = OnAllContactsLifted;
+                if (alh != null) alh();
+                FireMultiTouch();
+                return;
+            }
+
+            if (!_frameStarted) return;
+
+            bool foundContact = false;
+            for (int c = 0; c < _maxContacts; c++)
+            {
+                bool down = _directTip[c].BitSize > 0 && ReadBitField(reportBytes, _directTip[c].BitOffset, _directTip[c].BitSize, false) != 0;
+                if (down)
+                {
+                    int cx = _directX[c].BitSize > 0 ? ReadBitField(reportBytes, _directX[c].BitOffset, _directX[c].BitSize, _directX[c].IsSigned) : 0;
+                    int cy = _directY[c].BitSize > 0 ? ReadBitField(reportBytes, _directY[c].BitOffset, _directY[c].BitSize, _directY[c].IsSigned) : 0;
+                    int cid = _directId[c].BitSize > 0 ? ReadBitField(reportBytes, _directId[c].BitOffset, _directId[c].BitSize, false) : c;
+
+                    if (_batchContacts == null || _batchCount >= _batchContacts.Length)
+                    {
+                        var newArr = new TouchContact[(_batchContacts == null ? 0 : _batchContacts.Length) + 8];
+                        if (_batchContacts != null) Array.Copy(_batchContacts, newArr, _batchCount);
+                        _batchContacts = newArr;
+                    }
+                    _batchContacts[_batchCount].X = cx;
+                    _batchContacts[_batchCount].Y = cy;
+                    _batchContacts[_batchCount].Id = cid;
+                    _batchCount++;
+
+                    var cuh = OnContactUpdate;
+                    if (cuh != null) cuh(cid, cx, cy, true);
+                    foundContact = true;
+                }
+                else if (_directTip[c].BitSize > 0)
+                {
+                    int cid = _directId[c].BitSize > 0 ? ReadBitField(reportBytes, _directId[c].BitOffset, _directId[c].BitSize, false) : c;
+                    var cuh = OnContactUpdate;
+                    if (cuh != null) cuh(cid, 0, 0, false);
+                    foundContact = true;
+                }
+            }
+
+            if (foundContact)
+                _reportedContactSlots++;
+        }
+
+        #endregion
 
         private void DiscoverSingleTouchIndices(byte[] reportBytes, Report report)
         {

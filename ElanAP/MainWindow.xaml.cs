@@ -75,6 +75,9 @@ namespace ElanAP
             ManiaPanel.StopRequested += StopManiaDriver;
             ManiaPanel.SetRunningState(false);
 
+            if (Config.SelectedTab >= 0 && Config.SelectedTab < MainTabs.Items.Count)
+                MainTabs.SelectedIndex = Config.SelectedTab;
+
             if (RegisterHotKey(_hwnd, HOTKEY_ID, 0, VK_F6))
                 Console.Log("Global hotkey F6 registered for Start/Stop toggle.");
             else
@@ -397,9 +400,12 @@ namespace ElanAP
             if (NotifyIcon != null)
                 NotifyIcon.Dispose();
 
-            // Save mania zones to config on close
             if (ManiaPanel != null)
                 Config.ManiaZones = ManiaPanel.GetZones();
+            Config.SelectedTab = MainTabs.SelectedIndex;
+
+            try { SaveDefaultConfig(); }
+            catch { }
         }
 
         #endregion

@@ -80,26 +80,20 @@ namespace ElanAP
 
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
-        private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        private unsafe IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             try
             {
                 if (nCode >= 0)
                 {
                     int msg = (int)wParam;
-                    if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
-                        msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP ||
-                        msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP ||
-                        msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL ||
-                        msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP)
+                    if (msg >= WM_MOUSEMOVE && msg <= WM_MOUSEHWHEEL)
                     {
-                        var info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                        // Allow injected events (from software)
-                        if ((info.flags & LLMHF_INJECTED) != 0)
+                        uint flags = ((MSLLHOOKSTRUCT*)lParam)->flags;
+                        if ((flags & LLMHF_INJECTED) != 0)
                             return CallNextHookEx(_hookId, nCode, wParam, lParam);
 
-                        // Block only if touchpad was active recently (within 100ms)
-                        // This allows USB/external mice to work normally
+                        // Block touchpad within 100ms window (allows USB mice)
                         int elapsed = Environment.TickCount - _lastTouchpadInputTick;
                         if (elapsed >= 0 && elapsed < 100)
                             return (IntPtr)1;
@@ -141,7 +135,6 @@ namespace ElanAP
         private const uint LLKHF_ALTDOWN = 0x20;
         private const uint LLKHF_INJECTED = 0x10;
 
-        // Magic marker to identify our own SendInput calls vs PTP gesture injections
         private static readonly IntPtr EXTRAINFO_MARKER = (IntPtr)0x4D4E4941; // "MNIA"
 
         private LowLevelKeyboardProc _kbProc;
@@ -160,7 +153,6 @@ namespace ElanAP
                 FireOutput("Keyboard hook installed - gesture shortcuts blocked.");
         }
 
-        // SetWindowsHookEx is already imported above but accepts different delegate types via IntPtr
         [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowsHookEx")]
         private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
@@ -176,18 +168,18 @@ namespace ElanAP
 
         [HandleProcessCorruptedStateExceptions]
         [SecurityCritical]
-        private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        private unsafe IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             try
             {
                 if (nCode >= 0)
                 {
-                    var info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
+                    KBDLLHOOKSTRUCT* pInfo = (KBDLLHOOKSTRUCT*)lParam;
 
-                    if (info.vkCode == VK_LWIN || info.vkCode == VK_RWIN)
+                    if (pInfo->vkCode == VK_LWIN || pInfo->vkCode == VK_RWIN)
                         return (IntPtr)1;
 
-                    if ((info.flags & LLKHF_INJECTED) != 0 && info.dwExtraInfo != EXTRAINFO_MARKER)
+                    if ((pInfo->flags & LLKHF_INJECTED) != 0 && pInfo->dwExtraInfo != EXTRAINFO_MARKER)
                         return (IntPtr)1;
                 }
             }
@@ -220,8 +212,6 @@ namespace ElanAP
             public INPUTUNION u;
         }
 
-        // Union must include MOUSEINPUT so the struct has the correct size
-        // (MOUSEINPUT is the largest member, 32 bytes on x64)
         [StructLayout(LayoutKind.Explicit)]
         private struct INPUTUNION
         {
@@ -252,16 +242,6 @@ namespace ElanAP
 
         private const uint INPUT_KEYBOARD = 1;
         private const uint KEYEVENTF_KEYUP = 0x0002;
-
-        #endregion
-
-        #region Touchpad Gesture Suppression
-
-        // Gestures are suppressed entirely through hooks (no registry changes needed):
-        // - Mouse hook: blocks touchpad cursor movement and clicks
-        // - Keyboard hook: blocks injected gesture shortcuts (3/4 finger swipe = Win+Tab etc.)
-        // - Raw Input: touchpad data is consumed directly, bypassing gesture recognition
-        // This approach is crash-safe — no persistent system changes that need cleanup.
 
         #endregion
 
@@ -406,7 +386,6 @@ namespace ElanAP
                     return;
                 }
 
-                // Register Raw Input on this thread's window
                 API.OnContactUpdate += HandleContactUpdate;
                 API.OnFrameComplete += HandleFrameComplete;
                 API.OnAllContactsLifted += HandleAllContactsLifted;
@@ -421,7 +400,6 @@ namespace ElanAP
                     return;
                 }
 
-                // Install hooks on THIS thread (uses this thread's message pump)
                 InstallMouseHook();
                 InstallKeyboardHook();
 
@@ -430,7 +408,6 @@ namespace ElanAP
 
                 FireOutput("Dedicated input thread running. INPUT struct size: " + _inputStructSize + " bytes. Press F6 to toggle.");
 
-                // Message pump - processes WM_INPUT + hook callbacks
                 MSG msg;
                 while (GetMessage(out msg, IntPtr.Zero, 0, 0) > 0)
                 {
@@ -445,7 +422,6 @@ namespace ElanAP
             }
             finally
             {
-                // Cleanup on this thread
                 UninstallKeyboardHook();
                 UninstallMouseHook();
                 API.OnContactUpdate -= HandleContactUpdate;
@@ -502,20 +478,16 @@ namespace ElanAP
         public Touchpad TouchpadDevice;
         public List<Zone> Zones = new List<Zone>();
 
-        // Track which zones are currently pressed (by zone index) - use bool array for O(1) lookup
         private bool[] _activeZones;
         private int _activeZoneCount;
 
-        // Pre-computed zone bounds in device coordinates (use int for faster comparison)
         private int[] _zoneX1, _zoneY1, _zoneX2, _zoneY2;
         private ushort[] _zoneVk;
-        private ushort[] _zoneScan; // pre-computed scan codes
+        private ushort[] _zoneScan;
 
-        // Pre-allocated for SendInput (avoid per-call allocation)
         private INPUT[] _inputBuffer = new INPUT[1];
         private int _inputStructSize;
 
-        // Pre-allocated for visual feedback
         private int[] _activeZoneIndices;
         private static readonly int[] _emptyZoneIndices = new int[0];
 
@@ -557,13 +529,11 @@ namespace ElanAP
             _activeZoneIndices = new int[n];
             _activeZoneCount = 0;
 
-            // Initialize contact tracking
             _trackId = new int[MAX_TRACKED_CONTACTS];
             _trackZone = new int[MAX_TRACKED_CONTACTS];
             _trackSeen = new bool[MAX_TRACKED_CONTACTS];
             _trackCount = 0;
 
-            // Cache INPUT struct size once
             _inputStructSize = Marshal.SizeOf(typeof(INPUT));
 
             for (int i = 0; i < n; i++)
@@ -582,7 +552,6 @@ namespace ElanAP
 
             _firstTouch = true;
 
-            // Initialize performance tracking
             if (PerfEnabled)
             {
                 if (_handlerWatch == null) _handlerWatch = new Stopwatch();
@@ -595,10 +564,6 @@ namespace ElanAP
                 API.EnablePerformanceTracking(true);
             }
 
-            // Start dedicated high-priority input thread
-            // This thread creates a hidden window, registers Raw Input, installs hooks,
-            // and runs its own message pump — completely decoupled from WPF UI thread.
-            // Hooks suppress all gesture side-effects (cursor, injected shortcuts).
             StartInputThread();
 
             if (!_inputStartedOK)
@@ -607,19 +572,22 @@ namespace ElanAP
                 return;
             }
 
+            // Suppress GC during mania — eliminates rare 5ms+ GC spikes
+            try { GC.TryStartNoGCRegion(4 * 1024 * 1024); } catch { }
+
             IsActive = true;
             FireOutput("Mania mode active.");
         }
 
         public void Stop()
         {
-            // Signal input thread to stop — it handles all cleanup:
-            // unhook, unregister raw input, release held keys, destroy window
             StopInputThread();
 
-            // Clear visual feedback
             var zoneHandler = ActiveZonesChanged;
             if (zoneHandler != null) zoneHandler(_emptyZoneIndices);
+
+            // Resume normal GC
+            try { GC.EndNoGCRegion(); } catch { }
 
             IsActive = false;
             FireOutput("Mania mode stopped.");
@@ -627,11 +595,10 @@ namespace ElanAP
 
         private bool _firstTouch = true;
 
-        // Contact tracking for incremental per-report processing (zero-alloc)
         private const int MAX_TRACKED_CONTACTS = 16;
-        private int[] _trackId;        // contact IDs currently tracked
-        private int[] _trackZone;      // zone index for each tracked contact (-1 = not in any zone)
-        private bool[] _trackSeen;     // seen in current frame (for stale contact cleanup)
+        private int[] _trackId;
+        private int[] _trackZone;
+        private bool[] _trackSeen;
         private int _trackCount;
 
         private int FindTrackedContact(int id)
@@ -713,13 +680,11 @@ namespace ElanAP
 
                 if (idx >= 0)
                 {
-                    // Known contact — mark seen
                     _trackSeen[idx] = true;
 
                     int prevZone = _trackZone[idx];
                     if (prevZone != zone)
                     {
-                        // Contact moved to different zone
                         if (prevZone >= 0 && !AnyTrackedContactInZone(idx, prevZone))
                             ReleaseZone(prevZone);
                         _trackZone[idx] = zone;
@@ -728,7 +693,6 @@ namespace ElanAP
                 }
                 else if (_trackCount < MAX_TRACKED_CONTACTS)
                 {
-                    // New contact
                     idx = _trackCount++;
                     _trackId[idx] = id;
                     _trackZone[idx] = zone;
@@ -738,7 +702,6 @@ namespace ElanAP
             }
             else
             {
-                // Contact lifted — release zone immediately
                 int idx = FindTrackedContact(id);
                 if (idx >= 0)
                 {
@@ -759,7 +722,6 @@ namespace ElanAP
                 }
             }
 
-            // Performance tracking
             if (PerfEnabled && _handlerWatch != null)
             {
                 long endTicks = _handlerWatch.ElapsedTicks;
@@ -769,7 +731,6 @@ namespace ElanAP
                 if (latency < _minHandlerTicks) _minHandlerTicks = latency;
                 if (latency > _maxHandlerTicks) _maxHandlerTicks = latency;
 
-                // Output stats every second
                 if (endTicks - _lastStatTicks >= Stopwatch.Frequency)
                 {
                     double avgUs = (_totalHandlerTicks * 1000000.0) / (_handlerCount * Stopwatch.Frequency);
@@ -805,7 +766,6 @@ namespace ElanAP
 
         private void HandleFrameCompleteCore()
         {
-            // Check for stale contacts (not reported in this frame — e.g. contactCount decreased)
             for (int i = _trackCount - 1; i >= 0; i--)
             {
                 if (!_trackSeen[i])
@@ -824,11 +784,9 @@ namespace ElanAP
                 }
             }
 
-            // Clear seen flags for next frame
             for (int i = 0; i < _trackCount; i++)
                 _trackSeen[i] = false;
 
-            // Fire visual feedback
             if (VisualFeedbackEnabled)
             {
                 var zoneHandler = ActiveZonesChanged;

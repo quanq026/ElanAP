@@ -488,8 +488,6 @@ namespace ElanAP
 
             if (!_frameStarted) return;
 
-            // Each HID report = 1 contact in hybrid mode
-            bool foundContact = false;
             for (int c = 0; c < _maxContacts; c++)
             {
                 bool down = _mtTipIdx[c] >= 0 && _parser.GetValue(_mtTipIdx[c]).GetLogicalValue() != 0;
@@ -510,24 +508,12 @@ namespace ElanAP
                     _batchContacts[_batchCount].Id = cid;
                     _batchCount++;
 
-                    // Fire immediate per-contact event (before frame completes)
                     var cuh = OnContactUpdate;
                     if (cuh != null) cuh(cid, cx, cy, true);
-
-                    foundContact = true;
-                }
-                else if (_mtTipIdx[c] >= 0)
-                {
-                    int cid = _mtIdIdx[c] >= 0 ? _parser.GetValue(_mtIdIdx[c]).GetLogicalValue() : c;
-                    var cuh = OnContactUpdate;
-                    if (cuh != null) cuh(cid, 0, 0, false);
-
-                    foundContact = true;
                 }
             }
 
-            if (foundContact)
-                _reportedContactSlots++;
+            _reportedContactSlots++;
         }
 
         private void DiscoverMultiTouchIndices(byte[] reportBytes, Report report)
@@ -724,7 +710,6 @@ namespace ElanAP
 
             if (!_frameStarted) return;
 
-            bool foundContact = false;
             for (int c = 0; c < _maxContacts; c++)
             {
                 bool down = _directTip[c].BitSize > 0 && ReadBitField(reportBytes, _directTip[c].BitOffset, _directTip[c].BitSize, false) != 0;
@@ -747,19 +732,10 @@ namespace ElanAP
 
                     var cuh = OnContactUpdate;
                     if (cuh != null) cuh(cid, cx, cy, true);
-                    foundContact = true;
-                }
-                else if (_directTip[c].BitSize > 0)
-                {
-                    int cid = _directId[c].BitSize > 0 ? ReadBitField(reportBytes, _directId[c].BitOffset, _directId[c].BitSize, false) : c;
-                    var cuh = OnContactUpdate;
-                    if (cuh != null) cuh(cid, 0, 0, false);
-                    foundContact = true;
                 }
             }
 
-            if (foundContact)
-                _reportedContactSlots++;
+            _reportedContactSlots++;
         }
 
         #endregion

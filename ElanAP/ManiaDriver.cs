@@ -5,6 +5,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading;
+using Microsoft.Win32;
 using ElanAP.Devices;
 
 namespace ElanAP
@@ -564,10 +565,13 @@ namespace ElanAP
                 API.EnablePerformanceTracking(true);
             }
 
+            SuppressGestures();
+
             StartInputThread();
 
             if (!_inputStartedOK)
             {
+                RestoreGestures();
                 FireOutput("Failed to start input thread.");
                 return;
             }
@@ -588,6 +592,8 @@ namespace ElanAP
 
             // Resume normal GC
             try { GC.EndNoGCRegion(); } catch { }
+
+            RestoreGestures();
 
             IsActive = false;
             FireOutput("Mania mode stopped.");
@@ -919,6 +925,92 @@ namespace ElanAP
             "Q", "W", "E", "R",
             "SPACE", "SHIFT", "CTRL",
         };
+
+        #endregion
+
+        #region Gesture Suppression
+
+        private const string PTP_REG_PATH = @"Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad";
+
+        private static readonly string[] GestureValueNames = new string[]
+        {
+            "ThreeFingerSlideEnabled",
+            "ThreeFingerTapEnabled",
+            "FourFingerSlideEnabled",
+            "FourFingerTapEnabled",
+            "TapsEnabled",
+            "PanEnabled",
+            "ZoomEnabled",
+            "EdgeTapEnabled",
+        };
+
+        private Dictionary<string, int> _savedGestureValues;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+
+        private static readonly IntPtr HWND_BROADCAST = (IntPtr)0xFFFF;
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+        private void BroadcastSettingChange()
+        {
+            IntPtr result;
+            SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, null, SMTO_ABORTIFHUNG, 1000, out result);
+        }
+
+        private void SuppressGestures()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(PTP_REG_PATH, true))
+                {
+                    if (key == null) return;
+                    _savedGestureValues = new Dictionary<string, int>();
+                    foreach (var name in GestureValueNames)
+                    {
+                        var val = key.GetValue(name);
+                        if (val is int)
+                            _savedGestureValues[name] = (int)val;
+                        else
+                            _savedGestureValues[name] = -1; // did not exist
+                        key.SetValue(name, 0, RegistryValueKind.DWord);
+                    }
+                }
+                BroadcastSettingChange();
+                FireOutput("Touchpad gestures suppressed via registry.");
+            }
+            catch (Exception ex)
+            {
+                FireOutput("Warning: Could not suppress gestures: " + ex.Message);
+            }
+        }
+
+        private void RestoreGestures()
+        {
+            if (_savedGestureValues == null) return;
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(PTP_REG_PATH, true))
+                {
+                    if (key == null) return;
+                    foreach (var kv in _savedGestureValues)
+                    {
+                        if (kv.Value == -1)
+                            key.DeleteValue(kv.Key, false);
+                        else
+                            key.SetValue(kv.Key, kv.Value, RegistryValueKind.DWord);
+                    }
+                }
+                _savedGestureValues = null;
+                BroadcastSettingChange();
+                FireOutput("Touchpad gestures restored.");
+            }
+            catch (Exception ex)
+            {
+                FireOutput("Warning: Could not restore gestures: " + ex.Message);
+            }
+        }
 
         #endregion
     }
